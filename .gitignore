@@ -3,3 +3,6 @@
 *yml
 *out
 *fits
+build/
+dist/
+*egg*

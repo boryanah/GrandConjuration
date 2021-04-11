@@ -66,7 +66,7 @@ params:
     proposal: 0.05
   m_nu: 0.
   # Nuisance (should all start with 'input_params_prefix')
-  shcl_DESgc0_b0:
+  galshcl_DESgc0_b0:
     prior:
       min: -3.000
       max: 3.000
@@ -75,7 +75,7 @@ params:
       loc: 1.41
       scale: 0.1
     proposal: 0.13
-  shcl_DESgc1_b0:
+  galshcl_DESgc1_b0:
     prior:
       min: -3.000
       max: 3.000
@@ -84,7 +84,7 @@ params:
       loc: 1.6
       scale: 0.1
     proposal: 0.12
-  shcl_DESgc2_b0:
+  galshcl_DESgc2_b0:
     prior:
       min: -3.000
       max: 3.000
@@ -93,7 +93,7 @@ params:
       loc: 1.6
       scale: 0.1
     proposal: 0.11
-  shcl_DESgc3_b0:
+  galshcl_DESgc3_b0:
     prior:
       min: -3.000
       max: 3.000
@@ -102,7 +102,7 @@ params:
       loc: 1.91
       scale: 0.1
     proposal: 0.14
-  shcl_DESgc4_b0:
+  galshcl_DESgc4_b0:
     prior:
       min: -3.000
       max: 3.000
@@ -111,7 +111,7 @@ params:
       loc: 1.96
       scale: 0.1
     proposal: 0.14
-  shcl_DESwl0_m:
+  galshcl_DESwl0_m:
     prior:
       dist: norm
       loc: 0.012
@@ -121,7 +121,7 @@ params:
       loc: 0.012
       scale: 0.01
     proposal: 0.005
-  shcl_DESwl1_m:
+  galshcl_DESwl1_m:
     prior:
       dist: norm
       loc: 0.012
@@ -131,7 +131,7 @@ params:
       loc: 0.012
       scale: 0.01
     proposal: 0.005
-  shcl_DESwl2_m:
+  galshcl_DESwl2_m:
     prior:
       dist: norm
       loc: 0.012
@@ -141,7 +141,7 @@ params:
       loc: 0.012
       scale: 0.01
     proposal: 0.005
-  shcl_DESwl3_m:
+  galshcl_DESwl3_m:
     prior:
       dist: norm
       loc: 0.012
@@ -151,7 +151,7 @@ params:
       loc: 0.012
       scale: 0.01
     proposal: 0.02
-  shcl_DESgc0_dz:
+  galshcl_DESgc0_dz:
     prior:
       dist: norm
       loc: 0.000
@@ -161,7 +161,7 @@ params:
       loc: 0.000
       scale: 0.007
     proposal: 0.005
-  shcl_DESgc1_dz:
+  galshcl_DESgc1_dz:
     prior:
       dist: norm
       loc: 0.000
@@ -171,7 +171,7 @@ params:
       loc: 0.000
       scale: 0.007
     proposal: 0.005
-  shcl_DESgc2_dz:
+  galshcl_DESgc2_dz:
     prior:
       dist: norm
       loc: 0.000
@@ -181,7 +181,7 @@ params:
       loc: 0.000
       scale: 0.006
     proposal: 0.005
-  shcl_DESgc3_dz:
+  galshcl_DESgc3_dz:
     prior:
       dist: norm
       loc: 0.000
@@ -191,7 +191,7 @@ params:
       loc: 0.000
       scale: 0.01
     proposal: 0.005
-  shcl_DESgc4_dz:
+  galshcl_DESgc4_dz:
     prior:
       dist: norm
       loc: 0.000
@@ -201,7 +201,7 @@ params:
       loc: 0.000
       scale: 0.01
     proposal: 0.005
-  shcl_DESwl0_dz:
+  galshcl_DESwl0_dz:
     prior:
       dist: norm
       loc: -0.001
@@ -211,7 +211,7 @@ params:
       loc: -0.001
       scale: 0.016
     proposal: 0.005
-  shcl_DESwl1_dz:
+  galshcl_DESwl1_dz:
     prior:
       dist: norm
       loc: -0.019
@@ -221,7 +221,7 @@ params:
       loc: -0.019
       scale: 0.013
     proposal: 0.005
-  shcl_DESwl2_dz:
+  galshcl_DESwl2_dz:
     prior:
       dist: norm
       loc: 0.009
@@ -231,7 +231,7 @@ params:
       loc: 0.009
       scale: 0.011
     proposal: 0.005
-  shcl_DESwl3_dz:
+  galshcl_DESwl3_dz:
     prior:
       dist: norm
       loc: -0.018
@@ -241,7 +241,7 @@ params:
       loc: -0.018
       scale: 0.022
     proposal: 0.005
-  shcl_A_IA:
+  galshcl_A_IA:
     prior:
       min: -5.0
       max: 5.0
@@ -251,7 +251,7 @@ params:
       scale: 0.2
     latex: A_{\rm IA}
     proposal: 0.1
-  shcl_eta_IA:
+  galshcl_eta_IA:
     prior:
       min: -5.0
       max: 5.0
@@ -264,7 +264,7 @@ params:
 
 # CCL settings
 theory:
-  shcl_like.CCL:
+  galshcl_like.CCL:
     transfer_function: boltzmann_camb
     matter_pk: halofit
     baryons_pk: nobaryons
@@ -273,7 +273,7 @@ theory:
 
 # Likelihood settings
 likelihood:
-  shcl_like.ShClLike:
+  galshcl_like.GalshClLike:
     # Input sacc file
     input_file: /users/boryanah/repos/hybrid_eft_nbody/data/cls_covG_covNG_DESgc_DESwl.fits
     # List all relevant bins
@@ -358,7 +358,7 @@ likelihood:
         lmax: 2000
         lmin: 30
     # Prefix associated to all nuisance params
-    input_params_prefix: shcl
+    input_params_prefix: galshcl
     # IADESY1, IAPerBin or IANone
     ia_model: IADESY1
     # NzShift or NzNone
