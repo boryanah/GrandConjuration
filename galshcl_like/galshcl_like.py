@@ -1,9 +1,10 @@
-import pyccl as ccl
 import numpy as np
-from cobaya.likelihood import Likelihood
-from cobaya.log import LoggedError
 from scipy.interpolate import interp1d
 
+import pyccl as ccl
+from cobaya.likelihood import Likelihood
+from cobaya.log import LoggedError
+from anzu.emu_funcs import LPTEmulator
 
 class GalshClLike(Likelihood):
     # All parameters starting with this will be
@@ -33,9 +34,36 @@ class GalshClLike(Likelihood):
         self._read_data()
         # Ell sampling for interpolation
         self._get_ell_sampling()
+        # Initialize HEFT model if used
+        if self.bz_model == 'HEFT':
+            self._initialize_HEFT()
 
+    def _initialize_HEFT(self):
+        # Initialize Hybrid EFT emulator
+        self.emu = LPTEmulator(use_sigma_8=False)
+
+        # k values over which tempaltes are computed
+        self.k = np.logspace(-3, 1, 1000)
+
+        # If we don't pass redshift (scale factor), emu assumes:
+        # [3.0, 2.0, 1.0, 0.85, 0.7, 0.55, 0.4, 0.25, 0.1, 0.0] but zmax = 2.0!, so 9
+        z = np.array([2.0, 1.0, 0.85, 0.7, 0.55, 0.4, 0.25, 0.1, 0.0])
+        self.a = 1./(1. + z)
+
+        # Available fields for the emulator
+        self.b_emu = ['b0', 'b1', 'b2', 'bs']
+
+        # Create a dictionary for the emulator outputs
+        emu_dict = {}
+        counter = 0
+        for i in range(len(self.b_emu)):
+            for j in range(len(self.b_emu)):
+                if j > i: continue
+                emu_dict[self.b_emu[i] + '_' + self.b_emu[j]] = counter
+                counter += 1
+        
     def get_suffix_for_tr(self, tr):
-        # B.H. Get name of the power spectra in the sacc file
+        # Get name of the power spectra in the sacc file
         if ('gc' in tr) or ('cv' in tr):
             return '0'
         elif ('wl' in tr) or ('bin' in tr):
@@ -53,7 +81,6 @@ class GalshClLike(Likelihood):
         import sacc
         s = sacc.Sacc.load_fits(self.input_file)
         self.bin_properties = {}
-        # B.H. change in the param files to match the names of the tracers
         for b in self.bins:
             if b['name'] not in s.tracers:
                 raise LoggedError(self.log, "Unknown tracer %s" % b['name'])
@@ -67,7 +94,7 @@ class GalshClLike(Likelihood):
             #lmax = cl.get('lmax', self.defaults.get('lmax', 1E30))
             lmin = np.min([self.defaults[cl['bins'][0]].get('lmin', 2), self.defaults[cl['bins'][1]].get('lmin', 2)])
             lmax = np.min([self.defaults[cl['bins'][0]].get('lmax', 1E30), self.defaults[cl['bins'][1]].get('lmax', 1E30)])
-            # B.H. get the dtype for both tracers
+            # Get the suffix for both tracers
             cl_name1 = self.get_suffix_for_tr(cl['bins'][0])
             cl_name2 = self.get_suffix_for_tr(cl['bins'][1])
             ind = s.indices('cl_%s%s' % (cl_name1, cl_name2), (cl['bins'][0], cl['bins'][1]),
@@ -82,7 +109,7 @@ class GalshClLike(Likelihood):
         self.l_min_sample = 1E30
         self.l_max_sample = -1E30
         for cl in self.twopoints:
-            # B.H. get the dtype for both tracers
+            # Get the suffix for both tracers
             cl_name1 = self.get_suffix_for_tr(cl['bins'][0])
             cl_name2 = self.get_suffix_for_tr(cl['bins'][1])
             l, c_ell, cov, ind = s.get_ell_cl('cl_%s%s' % (cl_name1, cl_name2),
@@ -168,14 +195,15 @@ class GalshClLike(Likelihood):
         if self.bz_model == 'Linear':
             b0 = pars[self.input_params_prefix + '_' + name + '_b0']
             bz *= b0
-            # B.H. this is where you include other models like HEFT
+        elif self.bz_model == 'HEFT':
+            # Pass just ones for the bias
+            pass
         elif self.bz_model != 'BzNone':
             raise LoggedError(self.log, "Unknown Bz model %s" % self.bz_model)
         return (z, bz)
 
     def _get_ia_bias(self, cosmo, name, **pars):
         # Get an IA amplitude for tracer with name `name`
-        # B.H. different parametrizations of the intrinsic alignment model 
         if self.ia_model == 'IANone':
             return None
         else:
@@ -203,13 +231,12 @@ class GalshClLike(Likelihood):
             ia = self._get_ia_bias(cosmo, name, **pars)
             t = ccl.WeakLensingTracer(cosmo, nz, ia_bias=ia)
         elif 'cv' in name:
-            # B.H. pass z_source as parameter to the YAML file
+            # B.H. TODO: pass z_source as parameter to the YAML file
             t = ccl.CMBLensingTracer(cosmo, z_source=1100)
         return t
 
     def _get_pk(self, cosmo):
         # Get P(k) to integrate over
-        # B.H. what model are we using for the power spectrum (def is halofit, HM is halo model)
         if self.pk_model == 'PkDefault':
             return None
         elif self.pk_model == 'PkHModel':
@@ -229,15 +256,120 @@ class GalshClLike(Likelihood):
             raise LoggedError("Unknown power spectrum model %s" %
                               self.pk_model)
 
+
+    def _parse_cosmo(self, cosmo):
+        # Initialize cosmology vector
+        cosmovec = np.zeros(7)
+        cosmovec[0] = cosmo['Omega_b'] * (cosmo['H0'] / 100)**2
+        cosmovec[1] = cosmo['Omega_c'] * (cosmo['H0'] / 100)**2
+        cosmovec[2] = cosmo['w0']
+        cosmovec[3] = cosmo['n_s']
+        cosmovec[4] = np.log(cosmo['A_s'] * 1.e10)
+        cosmovec[5] = cosmo['H0']
+        cosmovec[6] = cosmo['Neff']
+        #cosmovec[7] = a
+                                    
+        # Vector of cosmological parameters
+        cosmovec = np.atleast_2d(cosmovec)
+
+        return cosmovec
+
+
+    def _get_p_of_k_a(self, cosmo, trs, b_trs, clm):
+        # Get the emulator prediction for this cosmology
+        cosmovec = self._parse_cosmo(cosmo)
+        emu_spec = self.emu.predict(self.k, cosmovec)
+        print("emu spec = ", emu_spec.shape)
+        
+        # 9 redshifts, 10 combinations between bias params, and the rest are the ks
+        num_comb = int(len(self.b_emu)*(len(self.b_emu)-1)/2 + len(self.b_emu))
+        emu_spec = emu_spec.reshape(len(self.a), num_comb, -1)
+        print("emu spec = ", emu_spec.shape)
+
+        # Initialize power spectrum Pk_a(as, ks)
+        Pk_a = np.zeros_like(emu_spec[:, 0, :])
+        
+        # If both tracers are galaxies, Pk^{tr1,tr2} = f_i^bin1 * f_j^bin2 * Pk_ij
+        if 'gc' in trs[clm['bin_1']] and 'gc' in trs[clm['bin_2']]:
+            bias_eft1 = b_trs[clm['bin_1']]
+            bias_eft2 = b_trs[clm['bin_2']]
+
+            for key1 in bias_eft1.keys():
+                bias1 = bias_eft1[key1]
+
+                for key2 in bias_eft2.keys():
+                    bias2 = bias_eft2[key2]
+
+                    if key1+'_'+key2 in self.emu_dict.keys():
+                        comb = self.emu_dict[key1+'_'+key2]
+                    else:
+                        comb = self.emu_dict[key2+'_'+key1]
+                    Pk_a += bias1*bias2*emu_spec[:, comb, :]
+
+        # If first tracer is galaxies, Pk^{tr1,tr2} = f_i^bin1 * 1. * Pk_0i
+        elif 'gc' in trs[clm['bin_1']] and 'wl' in trs[clm['bin_2']]:
+            bias_eft1 = b_trs[clm['bin_1']]
+
+            for key1 in bias_eft1.keys():
+                bias1 = bias_eft1[key1]
+                comb = self.emu_dict['b0'+'_'+key1]
+                Pk_a += bias1*emu_spec[:, comb, :]
+
+        # If second tracer is galaxies, Pk^{tr1,tr2} = f_j^bin2 * 1. * Pk_0j
+        elif 'wl' in trs[clm['bin_1']] and 'gc' in trs[clm['bin_2']]:
+            bias_eft2 = b_trs[clm['bin_2']]
+
+            for key2 in bias_eft2.keys():
+                bias2 = bias_eft2[key2]
+                comb = self.emu_dict['b0'+'_'+key2]
+                Pk_a += bias2*emu_spec[:, comb, :]
+
+        # Convert ks from [Mpc/h]^-1 to [Mpc]^-1
+        lk_arr = np.log(self.k*cosmo['H0']/100.)
+
+        # Same for the power spectrum: convert to Mpc^3
+        Pk_a /= (cosmo['H0']/100.)**3.
+        
+        # Compute the 2D power spectrum
+        p_of_k_a = ccl.Pk2D(a_arr=self.a, lk_arr=lk_arr, pk_arr=Pk_a, is_logp=False)
+        
+        return p_of_k_a
+
+    def _get_b_heft(self, tn, **pars):
+        # Read in the 4 HEFT parameters (b1, b2, bs, bn) and enforce b0 = 1.
+        b_heft = {}
+        for b in self.b_emu:
+            b_heft[b] = pars.get(self.input_params_prefix + '_' + tn + '_' + b, 0.)
+        print("b_heft = ", b_heft)
+        # B.H. cheating (move to params)
+        b_heft['b0'] = 1.
+        assert b_heft['b0'] == 1., "If using the HEFT model, b0 needs to be set to 1"
+
+        
     def _get_cl_wl(self, cosmo, pk, **pars):
         # Compute all C_ells without multiplicative bias
         trs = {}
+        b_trs = {} # only used for HEFT
         for tn in self.used_tracers:
             trs[tn] = self._get_tracer(cosmo, tn, **pars)
+            if self.bz_model == 'HEFT' and 'wl' not in tn:
+                b_trs[tn] = self._get_b_heft(tn, **pars)
+
         cls = []
         for clm in self.cl_meta:
-            cl = ccl.angular_cl(cosmo, trs[clm['bin_1']], trs[clm['bin_2']],
-                                self.l_sample, p_of_k_a=pk)
+            # Compute the angular power spectrum with more care if using HEFT model
+            if self.bz_model == 'HEFT':
+                if 'wl' in clm['bin_1'] and 'wl' in clm['bin_2']:
+                    cl = ccl.angular_cl(cosmo, trs[clm['bin_1']], trs[clm['bin_2']],
+                                        self.l_sample, p_of_k_a=pk)
+                else:
+                    # Obtain power spectrum as a function of k and a
+                    p_of_k_a = self._get_p_of_k_a(cosmo, trs, b_trs, clm)
+                    cl = ccl.angular_cl(cosmo, trs[clm['bin_1']], trs[clm['bin_2']],
+                                        self.l_sample, p_of_k_a=p_of_k_a)
+            else:
+                cl = ccl.angular_cl(cosmo, trs[clm['bin_1']], trs[clm['bin_2']],
+                                    self.l_sample, p_of_k_a=pk)
             clb = self._eval_interp_cl(cl, clm['l_bpw'], clm['w_bpw'])
             cls.append(clb)
         return cls
@@ -266,7 +398,6 @@ class GalshClLike(Likelihood):
         # By selecting `self._get_pk` as a `method` of CCL here,
         # we make sure that this function is only run when the
         # cosmological parameters vary.
-        # B.H. this makes things faster
         return {'CCL': {'methods': {'pk': self._get_pk}}}
 
     def logp(self, **pars):
