@@ -6,3 +6,6 @@
 build/
 dist/
 *egg*
+*png
+*pyc
+*__pycache__

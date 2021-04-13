@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 from scipy.interpolate import interp1d
 
@@ -43,7 +45,7 @@ class GalshClLike(Likelihood):
         self.emu = LPTEmulator(use_sigma_8=False)
 
         # k values over which tempaltes are computed
-        self.k = np.logspace(-3, 1, 1000)
+        self.k = np.logspace(-3, 0, 1000)
 
         # If we don't pass redshift (scale factor), emu assumes:
         # [3.0, 2.0, 1.0, 0.85, 0.7, 0.55, 0.4, 0.25, 0.1, 0.0] but zmax = 2.0!, so 9
@@ -54,12 +56,13 @@ class GalshClLike(Likelihood):
         self.b_emu = ['b0', 'b1', 'b2', 'bs']
 
         # Create a dictionary for the emulator outputs
-        emu_dict = {}
+        self.emu_dict = {}
         counter = 0
         for i in range(len(self.b_emu)):
             for j in range(len(self.b_emu)):
                 if j > i: continue
-                emu_dict[self.b_emu[i] + '_' + self.b_emu[j]] = counter
+                self.emu_dict[self.b_emu[i] + '_' + self.b_emu[j]] = counter
+                self.emu_dict[self.b_emu[j] + '_' + self.b_emu[i]] = counter
                 counter += 1
         
     def get_suffix_for_tr(self, tr):
@@ -259,7 +262,7 @@ class GalshClLike(Likelihood):
 
     def _parse_cosmo(self, cosmo):
         # Initialize cosmology vector
-        cosmovec = np.zeros(7)
+        cosmovec = np.zeros(8)
         cosmovec[0] = cosmo['Omega_b'] * (cosmo['H0'] / 100)**2
         cosmovec[1] = cosmo['Omega_c'] * (cosmo['H0'] / 100)**2
         cosmovec[2] = cosmo['w0']
@@ -267,7 +270,7 @@ class GalshClLike(Likelihood):
         cosmovec[4] = np.log(cosmo['A_s'] * 1.e10)
         cosmovec[5] = cosmo['H0']
         cosmovec[6] = cosmo['Neff']
-        #cosmovec[7] = a
+        cosmovec[7] = 1. # random scale factor just to initialize
                                     
         # Vector of cosmological parameters
         cosmovec = np.atleast_2d(cosmovec)
@@ -275,22 +278,27 @@ class GalshClLike(Likelihood):
         return cosmovec
 
 
-    def _get_p_of_k_a(self, cosmo, trs, b_trs, clm):
-        # Get the emulator prediction for this cosmology
-        cosmovec = self._parse_cosmo(cosmo)
-        emu_spec = self.emu.predict(self.k, cosmovec)
-        print("emu spec = ", emu_spec.shape)
-        
+    def _compute_emu_spec(self, cosmo):
         # 9 redshifts, 10 combinations between bias params, and the rest are the ks
         num_comb = int(len(self.b_emu)*(len(self.b_emu)-1)/2 + len(self.b_emu))
-        emu_spec = emu_spec.reshape(len(self.a), num_comb, -1)
-        print("emu spec = ", emu_spec.shape)
+        emu_spec = np.zeros((len(self.a), num_comb, len(self.k)))
+        
+        # Get the emulator prediction for this cosmology
+        cosmovec = self._parse_cosmo(cosmo)
+            
+        for i in range(len(self.a)):
+            cosmovec[-1, -1] = self.a[i]
+            emu_spec[i] = self.emu.predict(self.k, cosmovec)
 
+        return emu_spec
+
+    def _get_p_of_k_a(self, emu_spec, cosmo, b_trs, clm):
+        
         # Initialize power spectrum Pk_a(as, ks)
         Pk_a = np.zeros_like(emu_spec[:, 0, :])
-        
+
         # If both tracers are galaxies, Pk^{tr1,tr2} = f_i^bin1 * f_j^bin2 * Pk_ij
-        if 'gc' in trs[clm['bin_1']] and 'gc' in trs[clm['bin_2']]:
+        if 'gc' in clm['bin_1'] and 'gc' in clm['bin_2']:
             bias_eft1 = b_trs[clm['bin_1']]
             bias_eft2 = b_trs[clm['bin_2']]
 
@@ -307,7 +315,7 @@ class GalshClLike(Likelihood):
                     Pk_a += bias1*bias2*emu_spec[:, comb, :]
 
         # If first tracer is galaxies, Pk^{tr1,tr2} = f_i^bin1 * 1. * Pk_0i
-        elif 'gc' in trs[clm['bin_1']] and 'wl' in trs[clm['bin_2']]:
+        elif 'gc' in clm['bin_1'] and 'wl' in clm['bin_2']:
             bias_eft1 = b_trs[clm['bin_1']]
 
             for key1 in bias_eft1.keys():
@@ -316,7 +324,7 @@ class GalshClLike(Likelihood):
                 Pk_a += bias1*emu_spec[:, comb, :]
 
         # If second tracer is galaxies, Pk^{tr1,tr2} = f_j^bin2 * 1. * Pk_0j
-        elif 'wl' in trs[clm['bin_1']] and 'gc' in trs[clm['bin_2']]:
+        elif 'wl' in clm['bin_1'] and 'gc' in clm['bin_2']:
             bias_eft2 = b_trs[clm['bin_2']]
 
             for key2 in bias_eft2.keys():
@@ -326,7 +334,7 @@ class GalshClLike(Likelihood):
 
         # Convert ks from [Mpc/h]^-1 to [Mpc]^-1
         lk_arr = np.log(self.k*cosmo['H0']/100.)
-
+                          
         # Same for the power spectrum: convert to Mpc^3
         Pk_a /= (cosmo['H0']/100.)**3.
         
@@ -340,13 +348,13 @@ class GalshClLike(Likelihood):
         b_heft = {}
         for b in self.b_emu:
             b_heft[b] = pars.get(self.input_params_prefix + '_' + tn + '_' + b, 0.)
-        print("b_heft = ", b_heft)
         # B.H. cheating (move to params)
-        b_heft['b0'] = 1.
-        assert b_heft['b0'] == 1., "If using the HEFT model, b0 needs to be set to 1"
-
+        #b_heft['b0'] = 1. # TESTING
+        #assert b_heft['b0'] == 1., "If using the HEFT model, b0 needs to be set to 1"
+        return b_heft
         
     def _get_cl_wl(self, cosmo, pk, **pars):
+
         # Compute all C_ells without multiplicative bias
         trs = {}
         b_trs = {} # only used for HEFT
@@ -355,6 +363,10 @@ class GalshClLike(Likelihood):
             if self.bz_model == 'HEFT' and 'wl' not in tn:
                 b_trs[tn] = self._get_b_heft(tn, **pars)
 
+        # Compute the power spectrum for the HEFT model
+        if self.bz_model == 'HEFT':
+            emu_spec = self._compute_emu_spec(cosmo)
+                
         cls = []
         for clm in self.cl_meta:
             # Compute the angular power spectrum with more care if using HEFT model
@@ -364,7 +376,7 @@ class GalshClLike(Likelihood):
                                         self.l_sample, p_of_k_a=pk)
                 else:
                     # Obtain power spectrum as a function of k and a
-                    p_of_k_a = self._get_p_of_k_a(cosmo, trs, b_trs, clm)
+                    p_of_k_a = self._get_p_of_k_a(emu_spec, cosmo, b_trs, clm)
                     cl = ccl.angular_cl(cosmo, trs[clm['bin_1']], trs[clm['bin_2']],
                                         self.l_sample, p_of_k_a=p_of_k_a)
             else:
