@@ -42,7 +42,7 @@ class GalshClLike(Likelihood):
 
     def _initialize_HEFT(self):
         # Initialize Hybrid EFT emulator
-        self.emu = LPTEmulator(use_sigma_8=False)
+        self.emu = LPTEmulator(use_sigma_8=False, kecleft=True)
 
         # k values over which tempaltes are computed
         self.k = np.logspace(-3, 0, 1000)
@@ -285,11 +285,12 @@ class GalshClLike(Likelihood):
         
         # Get the emulator prediction for this cosmology
         cosmovec = self._parse_cosmo(cosmo)
-            
+
+        t1 = time.time()
         for i in range(len(self.a)):
             cosmovec[-1, -1] = self.a[i]
             emu_spec[i] = self.emu.predict(self.k, cosmovec)
-
+        print("time = ", time.time()-t1)
         return emu_spec
 
     def _get_p_of_k_a(self, emu_spec, cosmo, b_trs, clm):

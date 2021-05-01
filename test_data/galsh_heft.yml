@@ -403,15 +403,23 @@ params:
 
 # CCL settings
 theory:
+#  galshcl_like.CLCCL:
+#  classy:
+#    extra_args:
+#      non linear: hmcode
+#      hmcode_min_k_max: 20
+#      N_ncdm: 1
+#      N_ur: 2.0328
   galshcl_like.CCL:
     transfer_function: boltzmann_camb
     matter_pk: halofit
     baryons_pk: nobaryons
     output_params:
       - sigma8
-
-# Likelihood settings
+  
+# Likelihood settings # TESTING
 likelihood:
+#  planck_2018_lowl.TT: null
   galshcl_like.GalshClLike:
     # Input sacc file
     input_file: /users/boryanah/repos/hybrid_eft_nbody/data/cls_covG_covNG_DESgc_DESwl.fits

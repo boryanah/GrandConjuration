@@ -1,6 +1,9 @@
+import time
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
-import os
+
 from anzu.emu_funcs import LPTEmulator
 
 emu = LPTEmulator()
@@ -18,9 +21,11 @@ design_test, design_test_scaled = emu._setup_design(cosmos_test_file)
 # are Aemulus snapshots for all Aemulus test cosmologies. It's not necessary to use this for 
 # arbitrary cosmologies/redshifts.
 
-
+t1 = time.time()
 pce_spec = emu.predict(k, np.atleast_2d(design_test))
-
+print(pce_spec.shape)
+print("time = ", time.time()-t1)
+quit()
 
 f, ax = plt.subplots(4,4, sharex=True, sharey=True, facecolor='w')
 counter = 0
