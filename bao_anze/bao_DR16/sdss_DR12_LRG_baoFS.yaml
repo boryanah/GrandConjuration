@@ -1,0 +1,10 @@
+# Ask Anze about Eva's email from 5/21/21 
+
+path: null
+measurements_file: bao_data_DR16/sdss_DR12_LRG_FSBAO_DMDHfs8.txt
+cov_file: bao_data_DR16/sdss_DR12_LRG_FSBAO_DMDHfs8_covtot.txt
+
+# Aliases for automatic covariance matrix
+aliases: [BAO]
+# Speed in evaluations/second
+speed: 2000

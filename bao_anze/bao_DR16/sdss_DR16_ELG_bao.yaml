@@ -1,0 +1,23 @@
+# BAO measurement from SDSS DR7 Main Galaxy Sample
+# https://arxiv.org/abs/1409.3242
+
+path: null
+
+## to generat chi2 file
+#
+# open('sdss_DR16_ELG_baoiso_consensus_chi2.dat','w').writelines([str(x)+'\n' for x in
+#    (-2*np.log(np.array([float (x.split()[1]) for x in open('sdss_DR16_ELG_baoiso_consensus.dat').readlines()])))])
+#
+
+# File containing chi2 values
+prob_dist: bao_data_DR16/sdss_DR16_ELG_baoiso_consensus_chi2.dat
+
+prob_dist_bounds: [1.487792213104118133e+01, 2.227506517683055165e+01]
+# Rescaling of sound horizon (DV_fid/rs_fid)
+rs_rescale: 1
+# Measurement (only z is actually used in the likelihood)
+data: [0.845, -1,  "DV_over_rs"]
+# Aliases for automatic covariance matrix
+aliases: [BAO]
+# Speed in evaluations/second
+speed: 5000
