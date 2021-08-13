@@ -1,0 +1,12 @@
+# DR16 Lya Cross
+name = DR16LYxQSO
+
+zeff =2.334
+
+is_square = T
+DM_npoints = 50
+DH_npoints = 50
+prob_dist = sdss_DR16_LYxQSO_BAO_DMDHgrid.txt
+
+
+measurement_type = dilation

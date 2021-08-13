@@ -67,9 +67,9 @@ class GalshClLike(Likelihood):
         
     def get_suffix_for_tr(self, tr):
         # Get name of the power spectra in the sacc file
-        if ('gc' in tr) or ('cv' in tr):
+        if ('gc' in tr) or ('cv' in tr) or ('eBOSS' in tr) or ('DECALS' in tr): # eBOSS, DECALS also gc
             return '0'
-        elif ('wl' in tr) or ('bin' in tr):
+        elif ('wl' in tr) or ('KiDS1000' in tr):
             return 'e'
         else:
             raise ValueError('dtype not found for tracer {}'.format(tr))
@@ -83,16 +83,19 @@ class GalshClLike(Likelihood):
         # Reads covariance
         import sacc
         s = sacc.Sacc.load_fits(self.input_file)
+        
         self.bin_properties = {}
         for b in self.bins:
             if b['name'] not in s.tracers:
                 raise LoggedError(self.log, "Unknown tracer %s" % b['name'])
             t = s.tracers[b['name']]
+            if 'PLAcv' in b['name']: continue # CMB lensing doesn't have N(z)
             self.bin_properties[b['name']] = {'z_fid': t.z,
                                               'nz_fid': t.nz}
 
         indices = []
         for cl in self.twopoints:
+            # Selecting the smaller of the two
             #lmin = cl.get('lmin', self.defaults.get('lmin', 2))
             #lmax = cl.get('lmax', self.defaults.get('lmax', 1E30))
             lmin = np.min([self.defaults[cl['bins'][0]].get('lmin', 2), self.defaults[cl['bins'][1]].get('lmin', 2)])
@@ -100,8 +103,12 @@ class GalshClLike(Likelihood):
             # Get the suffix for both tracers
             cl_name1 = self.get_suffix_for_tr(cl['bins'][0])
             cl_name2 = self.get_suffix_for_tr(cl['bins'][1])
-            ind = s.indices('cl_%s%s' % (cl_name1, cl_name2), (cl['bins'][0], cl['bins'][1]),
-                            ell__gt=lmin, ell__lt=lmax)
+            if cl_name1 == 'e' and cl_name2 == '0': # get rid of cl_e0 case
+                ind = s.indices('cl_%s%s' % (cl_name2, cl_name1), (cl['bins'][0], cl['bins'][1]),
+                                ell__gt=lmin, ell__lt=lmax)
+            else:
+                ind = s.indices('cl_%s%s' % (cl_name1, cl_name2), (cl['bins'][0], cl['bins'][1]),
+                                ell__gt=lmin, ell__lt=lmax)
             indices += list(ind)
         s.keep_indices(np.array(indices))
 
@@ -115,11 +122,20 @@ class GalshClLike(Likelihood):
             # Get the suffix for both tracers
             cl_name1 = self.get_suffix_for_tr(cl['bins'][0])
             cl_name2 = self.get_suffix_for_tr(cl['bins'][1])
-            l, c_ell, cov, ind = s.get_ell_cl('cl_%s%s' % (cl_name1, cl_name2),
-                                              cl['bins'][0],
-                                              cl['bins'][1],
-                                              return_cov=True,
-                                              return_ind=True)
+            if cl_name1 == 'e' and cl_name2 == '0': # get rid of cl_e0 case
+                l, c_ell, cov, ind = s.get_ell_cl('cl_%s%s' % (cl_name2, cl_name1),
+                                                  cl['bins'][0],
+                                                  cl['bins'][1],
+                                                  return_cov=True,
+                                                  return_ind=True)
+            else:
+                l, c_ell, cov, ind = s.get_ell_cl('cl_%s%s' % (cl_name1, cl_name2),
+                                                  cl['bins'][0],
+                                                  cl['bins'][1],
+                                                  return_cov=True,
+                                                  return_ind=True)
+
+                                
             if c_ell.size > 0:
                 if cl['bins'][0] not in self.used_tracers:
                     self.used_tracers.append(cl['bins'][0])
@@ -182,6 +198,7 @@ class GalshClLike(Likelihood):
         # Get an N(z) for tracer with name `name`
         z = self.bin_properties[name]['z_fid']
         nz = self.bin_properties[name]['nz_fid']
+        if ((self.input_params_prefix + '_' + name + '_dz') not in pars.keys()): return (z, nz)
         if self.nz_model == 'NzShift':
             z = z + pars[self.input_params_prefix + '_' + name + '_dz']
             msk = z >= 0
@@ -205,6 +222,13 @@ class GalshClLike(Likelihood):
             raise LoggedError(self.log, "Unknown Bz model %s" % self.bz_model)
         return (z, bz)
 
+    def _get_mag(self, cosmo, name, **pars):
+        # Get magnification for tracer with name `name`
+        z = self.bin_properties[name]['z_fid']
+        s = np.ones_like(z)
+        s *= pars[self.input_params_prefix + '_' + name + '_s']
+        return (z, s)
+
     def _get_ia_bias(self, cosmo, name, **pars):
         # Get an IA amplitude for tracer with name `name`
         if self.ia_model == 'IANone':
@@ -227,10 +251,15 @@ class GalshClLike(Likelihood):
         # Get CCL tracer for tracer with name `name`
         if 'cv' not in name:
             nz = self._get_nz(cosmo, name, **pars)
-        if 'gc' in name:
+        if 'gc' in name or 'eBOSS' in name or 'DECALS' in name: # eBOSS, DECALS also gc
             bz = self._get_bz(cosmo, name, **pars)
-            t = ccl.NumberCountsTracer(cosmo, dndz=nz, bias=bz, has_rsd=False)
-        elif 'wl' in name:
+            if '_s' in name:
+                # Magnification bias
+                mag_bias = self._get_mag(cosmo, name, **pars)
+            else:
+                mag_bias = None
+            t = ccl.NumberCountsTracer(cosmo, dndz=nz, bias=bz, has_rsd=False, mag_bias=mag_bias)
+        elif 'wl' in name or 'KiDS1000' in name:
             ia = self._get_ia_bias(cosmo, name, **pars)
             t = ccl.WeakLensingTracer(cosmo, nz, ia_bias=ia)
         elif 'cv' in name:
@@ -294,12 +323,13 @@ class GalshClLike(Likelihood):
         return emu_spec
 
     def _get_p_of_k_a(self, emu_spec, cosmo, b_trs, clm):
+        # eBOSS, DECALS also gc
         
         # Initialize power spectrum Pk_a(as, ks)
         Pk_a = np.zeros_like(emu_spec[:, 0, :])
 
         # If both tracers are galaxies, Pk^{tr1,tr2} = f_i^bin1 * f_j^bin2 * Pk_ij
-        if 'gc' in clm['bin_1'] and 'gc' in clm['bin_2']:
+        if ('gc' in clm['bin_1'] or 'eBOSS' in clm['bin_1'] or 'DECALS' in clm['bin_1']) and ('gc' in clm['bin_2'] or 'eBOSS' in clm['bin_2'] or 'DECALS' in clm['bin_2']):
             bias_eft1 = b_trs[clm['bin_1']]
             bias_eft2 = b_trs[clm['bin_2']]
 
@@ -316,7 +346,7 @@ class GalshClLike(Likelihood):
                     Pk_a += bias1*bias2*emu_spec[:, comb, :]
 
         # If first tracer is galaxies, Pk^{tr1,tr2} = f_i^bin1 * 1. * Pk_0i
-        elif 'gc' in clm['bin_1'] and 'wl' in clm['bin_2']:
+        elif ('gc' in clm['bin_1'] or 'eBOSS' in clm['bin_1'] or 'DECALS' in clm['bin_1']) and ('wl' in clm['bin_2'] or 'KiDS1000' in clm['bin_2']):
             bias_eft1 = b_trs[clm['bin_1']]
 
             for key1 in bias_eft1.keys():
@@ -325,7 +355,7 @@ class GalshClLike(Likelihood):
                 Pk_a += bias1*emu_spec[:, comb, :]
 
         # If second tracer is galaxies, Pk^{tr1,tr2} = f_j^bin2 * 1. * Pk_0j
-        elif 'wl' in clm['bin_1'] and 'gc' in clm['bin_2']:
+        elif ('wl' in clm['bin_1'] or 'KiDS1000' in clm['bin_1']) and ('gc' in clm['bin_2'] or 'eBOSS' in clm['bin_2'] or 'DECALS' in clm['bin_2']):
             bias_eft2 = b_trs[clm['bin_2']]
 
             for key2 in bias_eft2.keys():
@@ -361,7 +391,7 @@ class GalshClLike(Likelihood):
         b_trs = {} # only used for HEFT
         for tn in self.used_tracers:
             trs[tn] = self._get_tracer(cosmo, tn, **pars)
-            if self.bz_model == 'HEFT' and 'wl' not in tn:
+            if self.bz_model == 'HEFT' and ('wl' not in tn and 'KiDS1000' not in tn):
                 b_trs[tn] = self._get_b_heft(tn, **pars)
 
         # Compute the power spectrum for the HEFT model
@@ -372,7 +402,7 @@ class GalshClLike(Likelihood):
         for clm in self.cl_meta:
             # Compute the angular power spectrum with more care if using HEFT model
             if self.bz_model == 'HEFT':
-                if 'wl' in clm['bin_1'] and 'wl' in clm['bin_2']:
+                if ('wl' in clm['bin_1'] or 'KiDS1000' in clm['bin_1']) and ('wl' in clm['bin_2'] or 'KiDS1000' in clm['bin_2']):
                     cl = ccl.angular_cl(cosmo, trs[clm['bin_1']], trs[clm['bin_2']],
                                         self.l_sample, p_of_k_a=pk)
                 else:
@@ -395,11 +425,11 @@ class GalshClLike(Likelihood):
         cls = self._get_cl_wl(cosmo, pk, **pars)
         cl_out = np.zeros(self.ndata)
         for clm, cl in zip(self.cl_meta, cls):
-            if 'wl' in clm['bin_1']:
+            if 'wl' in clm['bin_1'] or 'KiDS1000' in clm['bin_1']:
                 m1 = pars[self.input_params_prefix + '_' + clm['bin_1'] + '_m']
             else:
                 m1 = 0.
-            if 'wl' in clm['bin_2']:
+            if 'wl' in clm['bin_2'] or 'KiDS1000' in clm['bin_2']:
                 m2 = pars[self.input_params_prefix + '_' + clm['bin_2'] + '_m']
             else:
                 m2 = 0.

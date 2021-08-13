@@ -1,0 +1,12 @@
+# DR16 Lya Auto
+name = DR16LYAUTO
+
+zeff =2.334
+
+is_square = T
+DM_npoints = 50
+DH_npoints = 50
+prob_dist = sdss_DR16_LYAUTO_BAO_DMDHgrid.txt
+
+
+measurement_type = dilation

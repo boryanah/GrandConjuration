@@ -59,7 +59,7 @@ info = {"params": {"omch2": cosmo_params['Omega_c'] * cosmo_params['h'] ** 2.,
 fake_likelihood = False
 
 # load the yaml
-config_fn = 'test_data/galsh_heft_frankenstein.yml'
+config_fn = 'test_config/galsh_heft_frankenstein.yml'
 with open(config_fn, "r") as fin:
     info_yaml = yaml.load(fin, Loader=yaml.FullLoader)
 
@@ -75,12 +75,44 @@ for key in info.keys():
     if key == 'params': continue
     info_comb[key] = info[key]
 
-
-
-params = {'ns': 0.9649, 'logA':3.05, 'ombh2': 0.022, 'omch2': 0.12, 'tau': 0.05, 'H0': 70., 'mnu': 0.06}
+As = 2.081691e-09
+#params = {'ns': 0.9649, 'logA':3.05, 'ombh2': 0.022, 'omch2': 0.12, 'tau': 0.05, 'H0': 70., 'mnu': 0.06}
+params = {'ns': 0.9649, 'logA': np.log(As*1.e10), 'ombh2': 0.02236923, 'omch2': 0.1197866, 'tau': 0.055, 'H0': 6.743436e+01, 'mnu': 0.06}
 for k, v in info_yaml['params'].items():
-    if "DES" in k or 'IA' in k:
+    if "DES" in k or 'IA' in k:    
         params[k] = v['ref']['loc']
+for key in params.keys():
+    # HEFT
+    '''
+    if 'b0' in key:
+        params[key] = 1.    
+    elif 'b1' in key:
+        if 'gc0' in key:
+            params[key] = 0.41
+        if 'gc1' in key:
+            params[key] = 0.6
+        if 'gc2' in key:
+            params[key] = 0.6
+        if 'gc3' in key:
+            params[key] = 0.91
+        if 'gc4' in key:
+            params[key] = 0.96
+    '''
+    # Linear
+    if 'b0' in key:
+        if 'gc0' in key:
+            params[key] = 1.41
+        if 'gc1' in key:
+            params[key] = 1.6
+        if 'gc2' in key:
+            params[key] = 1.6
+        if 'gc3' in key:
+            params[key] = 1.91
+        if 'gc4' in key:
+            params[key] = 1.96
+    elif 'bs' in key or 'bn' in key or 'b2' in key or 'dz' in key or 'wl' in key:
+        params[key] = 0.
+        
 print(params)
 
 if fake_likelihood:
@@ -91,4 +123,6 @@ else:
     loglikes, derived = model.loglikes(params)
 
 print('loglikes =', loglikes)
+print("logLkl_MP = ", -289.823)
 print('OK')
+# matches v well for Linear and not HEFT with parameters as above
