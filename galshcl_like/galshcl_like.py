@@ -269,8 +269,16 @@ class GalshClLike(Likelihood):
 
     def _get_pk(self, cosmo):
         # Get P(k) to integrate over
+
+        # Compute the power spectrum for the HEFT model
+        if self.bz_model == 'HEFT':
+            emu_spec = self._compute_emu_spec(cosmo)
+        else:
+            emu_spec = None
+
+        # Compute the regular power spectrum for the halo model
         if self.pk_model == 'PkDefault':
-            return None
+            pk2d = None
         elif self.pk_model == 'PkHModel':
             mdef = ccl.halos.MassDef200c()
             hmf = ccl.halos.MassFuncTinker08(cosmo, mass_def=mdef)
@@ -283,10 +291,11 @@ class GalshClLike(Likelihood):
             pk2d = ccl.halos.halomod_Pk2D(cosmo, hmc, prof,
                                           lk_arr=lk_s, a_arr=a_s,
                                           normprof1=True)
-            return pk2d
         else:
             raise LoggedError("Unknown power spectrum model %s" %
                               self.pk_model)
+
+        return {'pk': pk2d, 'hefty': emu_spec}
 
 
     def _parse_cosmo(self, cosmo):
@@ -384,7 +393,7 @@ class GalshClLike(Likelihood):
         #assert b_heft['b0'] == 1., "If using the HEFT model, b0 needs to be set to 1"
         return b_heft
         
-    def _get_cl_wl(self, cosmo, pk, **pars):
+    def _get_cl_wl(self, cosmo, pk, emu_spec, **pars):
 
         # Compute all C_ells without multiplicative bias
         trs = {}
@@ -393,10 +402,6 @@ class GalshClLike(Likelihood):
             trs[tn] = self._get_tracer(cosmo, tn, **pars)
             if self.bz_model == 'HEFT' and ('wl' not in tn and 'KiDS1000' not in tn):
                 b_trs[tn] = self._get_b_heft(tn, **pars)
-
-        # Compute the power spectrum for the HEFT model
-        if self.bz_model == 'HEFT':
-            emu_spec = self._compute_emu_spec(cosmo)
                 
         cls = []
         for clm in self.cl_meta:
@@ -421,8 +426,9 @@ class GalshClLike(Likelihood):
         # Compute theory vector
         res = self.provider.get_CCL()
         cosmo = res['cosmo']
-        pk = res['pk']
-        cls = self._get_cl_wl(cosmo, pk, **pars)
+        pk = res['pk']['pk']
+        emu_spec = res['pk']['hefty']
+        cls = self._get_cl_wl(cosmo, pk, emu_spec, **pars)
         cl_out = np.zeros(self.ndata)
         for clm, cl in zip(self.cl_meta, cls):
             if 'wl' in clm['bin_1'] or 'KiDS1000' in clm['bin_1']:
